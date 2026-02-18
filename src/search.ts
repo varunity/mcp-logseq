@@ -3,9 +3,14 @@
  */
 
 import { join } from 'path';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import type { PathFilter } from './pathfilter.js';
-import type { SearchParams, BlockSearchResult } from './types.js';
+import type {
+  SearchParams,
+  BlockSearchResult,
+  SearchTasksParams,
+  TaskSearchResult,
+} from './types.js';
 import { parseBlocks, flattenBlocks } from './block-parser.js';
 import { generateLogseqUri } from './uri.js';
 
@@ -99,6 +104,8 @@ export class SearchService {
                 ex: excerpt || block.content.slice(0, 42),
                 mc: matchCount,
                 ln: 0,
+                ...(block.marker && { marker: block.marker }),
+                ...(block.priority && { priority: block.priority }),
               });
 
               if (results.length >= maxLimit) break;
@@ -130,6 +137,59 @@ export class SearchService {
       }
     }
 
+    return results;
+  }
+
+  /**
+   * Search for blocks that have Logseq task markers (TODO, DOING, DONE, LATER, NOW, etc.).
+   * See https://docs.logseq.com/#/page/tasks
+   */
+  async searchTasks(params: SearchTasksParams): Promise<TaskSearchResult[]> {
+    const { markers = [], path: pathFilter, limit = 20 } = params;
+    const maxLimit = Math.min(limit, 100);
+    const results: TaskSearchResult[] = [];
+    const markerSet = new Set(markers.map((m) => m.toUpperCase()));
+
+    let files: string[];
+    if (pathFilter && pathFilter.trim()) {
+      const fullPath = join(this.graphPath, pathFilter.replace(/^\//, ''));
+      const pathStat = await stat(fullPath).catch(() => null);
+      if (pathStat?.isFile()) files = [fullPath];
+      else if (pathStat?.isDirectory()) files = await this.findMarkdownFiles(fullPath);
+      else files = await this.findMarkdownFiles(this.graphPath);
+    } else {
+      files = await this.findMarkdownFiles(this.graphPath);
+    }
+
+    for (const fullPath of files) {
+      const relativePath = fullPath
+        .substring(this.graphPath.length + 1)
+        .replace(/\\/g, '/');
+      if (!this.pathFilter.isAllowed(relativePath)) continue;
+      if (results.length >= maxLimit) break;
+      try {
+        const raw = await readFile(fullPath, 'utf-8');
+        const frontmatterMatch = raw.match(/^---\n([\s\S]*?)\n---\n/);
+        const body = frontmatterMatch ? raw.slice(frontmatterMatch[0].length) : raw;
+        const blocks = parseBlocks(body, relativePath);
+        const flat = flattenBlocks(blocks);
+        for (const block of flat) {
+          if (!block.marker) continue;
+          if (markerSet.size > 0 && !markerSet.has(block.marker)) continue;
+          results.push({
+            path: relativePath,
+            uuid: block.uuid,
+            content: block.content,
+            marker: block.marker,
+            ...(block.priority && { priority: block.priority }),
+            level: block.level,
+          });
+          if (results.length >= maxLimit) break;
+        }
+      } catch {
+        // skip
+      }
+    }
     return results;
   }
 

@@ -162,6 +162,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'search_tasks',
+        description:
+          'Find blocks with Logseq task markers (TODO, DOING, DONE, LATER, NOW, CANCELED, WAIT, etc.). Optional filter by markers and/or path. See https://docs.logseq.com/#/page/tasks',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            markers: {
+              type: 'array',
+              items: { type: 'string', enum: ['TODO', 'DOING', 'DONE', 'LATER', 'NOW', 'CANCELED', 'CANCELLED', 'IN-PROGRESS', 'WAIT', 'WAITING'] },
+              description: 'Filter by task markers; if omitted, return all task blocks',
+            },
+            path: { type: 'string', description: 'Limit to this page or directory (e.g. pages/MyPage.md or journals/)' },
+            limit: { type: 'number', default: 20 },
+            prettyPrint: { type: 'boolean', default: false },
+          },
+        },
+      },
+      {
         name: 'read_block',
         description:
           'Read a single block by UUID. Resolves across the entire graph.',
@@ -377,6 +395,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     content: b.content,
                     level: b.level,
                     properties: b.properties,
+                    ...(b.marker && { marker: b.marker }),
+                    ...(b.priority && { priority: b.priority }),
                   })),
                 },
                 null,
@@ -438,6 +458,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'search_tasks': {
+        const markers = trimmed.markers as string[] | undefined;
+        const taskResults = await searchService.searchTasks({
+          markers: markers?.length ? (markers as ('TODO' | 'DOING' | 'DONE' | 'LATER' | 'NOW' | 'CANCELED' | 'CANCELLED' | 'IN-PROGRESS' | 'WAIT' | 'WAITING')[]) : undefined,
+          path: trimmed.path as string | undefined,
+          limit: (trimmed.limit as number) || 20,
+          prettyPrint: trimmed.prettyPrint as boolean | undefined,
+        });
+        const indent = trimmed.prettyPrint ? 2 : undefined;
+        return {
+          content: [{ type: 'text', text: JSON.stringify(taskResults, null, indent) }],
+        };
+      }
+
       case 'read_block': {
         const block = await fileSystem.findBlockByUuid(trimmed.uuid as string);
         const indent = trimmed.prettyPrint ? 2 : undefined;
@@ -467,6 +501,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   level: block.level,
                   properties: block.properties,
                   path: block.sourcePath,
+                  ...(block.marker && { marker: block.marker }),
+                  ...(block.priority && { priority: block.priority }),
                 },
                 null,
                 indent

@@ -3,6 +3,22 @@
  * Logseq uses blocks as the fundamental unit; pages are containers of blocks.
  */
 
+/** Logseq task markers (https://docs.logseq.com/#/page/tasks) */
+export type TaskMarker =
+  | 'TODO'
+  | 'DOING'
+  | 'DONE'
+  | 'LATER'
+  | 'NOW'
+  | 'CANCELED'
+  | 'CANCELLED'
+  | 'IN-PROGRESS'
+  | 'WAIT'
+  | 'WAITING';
+
+/** Priority for tasks: /A, /B, /C in Logseq */
+export type TaskPriority = 'A' | 'B' | 'C';
+
 /** A parsed Logseq block with UUID, content, level, and properties */
 export interface LogseqBlock {
   uuid: string;
@@ -12,6 +28,10 @@ export interface LogseqBlock {
   children: LogseqBlock[];
   parentUuid?: string;
   sourcePath: string;
+  /** Task workflow marker if block starts with TODO, DOING, DONE, LATER, NOW, etc. */
+  marker?: TaskMarker;
+  /** Priority A/B/C if block has [#A], [#B], [#C] after marker */
+  priority?: TaskPriority;
 }
 
 /** Page = file with frontmatter + block tree */
@@ -91,6 +111,26 @@ export interface BlockSearchResult {
   ex: string;
   mc: number;
   ln?: number;
+  marker?: TaskMarker;
+  priority?: TaskPriority;
+}
+
+export interface SearchTasksParams {
+  /** Filter by task markers (e.g. ["TODO", "DOING"]). If empty, return all task blocks. */
+  markers?: TaskMarker[];
+  /** Limit to this page path (e.g. "pages/MyPage.md") or directory; if omitted, search whole graph. */
+  path?: string;
+  limit?: number;
+  prettyPrint?: boolean;
+}
+
+export interface TaskSearchResult {
+  path: string;
+  uuid: string;
+  content: string;
+  marker: TaskMarker;
+  priority?: TaskPriority;
+  level: number;
 }
 
 export interface MoveNoteParams {

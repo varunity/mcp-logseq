@@ -95,18 +95,6 @@ npm run build
 npm start /path/to/graph   # Run with tsx
 ```
 
-## Publishing on GitHub
-
-- Ensure `README.md`, `LICENSE`, and `package.json` are in place (they are).
-- Run `npm run build` and `npm test` before pushing.
-- Create a new repo on GitHub, then:
-  ```bash
-  git remote add origin https://github.com/YOUR_USERNAME/mcp-logseq.git
-  git branch -M main
-  git push -u origin main
-  ```
-- Optional: `npm publish` for [npm](https://www.npmjs.com/) so users can run `npx mcp-logseq /path/to/graph`. See [PENDING.md](PENDING.md) for merging Logseq task syntax from your other machine before or after publishing.
-
 ## License
 
 MIT

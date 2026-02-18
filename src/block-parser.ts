@@ -5,13 +5,56 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import type { LogseqBlock } from './types.js';
+import type { LogseqBlock, TaskMarker, TaskPriority } from './types.js';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Match key:: value property (after trim) */
 const PROPERTY_REGEX = /^([a-zA-Z0-9_-]+)::\s*(.*)$/;
+
+/** Logseq task markers (https://docs.logseq.com/#/page/tasks) */
+const TASK_MARKERS: TaskMarker[] = [
+  'TODO',
+  'DOING',
+  'DONE',
+  'LATER',
+  'NOW',
+  'CANCELED',
+  'CANCELLED',
+  'IN-PROGRESS',
+  'WAIT',
+  'WAITING',
+];
+
+/** Regex: optional task marker at start (word boundary), optional [#A]/[#B]/[#C], rest is content */
+const TASK_MARKER_REGEX = new RegExp(
+  `^(${TASK_MARKERS.join('|')})\\b\\s*` +
+    `(?:\\[#([ABC])\\]\\s*)?` +
+    `(.*)$`,
+  'i'
+);
+
+/**
+ * Parse task marker and priority from block content (Logseq tasks syntax).
+ * Content is unchanged; returns marker/priority for the block.
+ */
+function parseTaskFromContent(
+  content: string
+): { marker?: TaskMarker; priority?: TaskPriority } {
+  const trimmed = content.trim();
+  const match = trimmed.match(TASK_MARKER_REGEX);
+  if (!match) return {};
+  const marker = match[1].toUpperCase() as TaskMarker;
+  const normalizedMarker =
+    marker === 'CANCELLED' ? 'CANCELED' : marker === 'WAITING' ? 'WAIT' : marker;
+  if (!TASK_MARKERS.includes(normalizedMarker as TaskMarker)) return {};
+  const priority = match[2] as TaskPriority | undefined;
+  return {
+    marker: normalizedMarker as TaskMarker,
+    ...(priority && { priority }),
+  };
+}
 
 function parsePropertyValue(v: string): string | number | boolean {
   const t = v.trim();
@@ -40,6 +83,7 @@ function buildBlockTree(
         ? item.properties.id
         : null) ?? uuidv4();
     const { id: _id, ...rest } = item.properties;
+    const task = parseTaskFromContent(item.content);
 
     const block: LogseqBlock = {
       uuid,
@@ -48,6 +92,8 @@ function buildBlockTree(
       properties: rest as Record<string, string | number | boolean>,
       children: [],
       sourcePath,
+      ...(task.marker && { marker: task.marker }),
+      ...(task.priority && { priority: task.priority }),
     };
 
     while (stack.length > 0 && stack[stack.length - 1].level >= item.level) {
